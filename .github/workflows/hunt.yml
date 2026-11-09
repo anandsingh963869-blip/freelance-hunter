@@ -1,0 +1,38 @@
+name: 24/7 Freelance Hunter
+
+on:
+  schedule:
+    # Runs every 30 minutes automatically 24/7 in GitHub cloud!
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Freelance Hunter
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '9258009174:AAFByQvFIrZeshenTPmEizIGp9Wrk_MCGpA' }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || '6196853483' }}
+          MERCURY_KEY: ${{ secrets.MERCURY_KEY || 'sk_50f1cfaa0c554c08601a0870deeb767fa887bc7c9edb24774fbc5739ec55184e' }}
+        run: |
+          python hunter.py
+
+      - name: Commit and Push Seen Jobs
+        run: |
+          git config --global user.name "Anand Hunter Bot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git add seen_jobs.json
+          git commit -m "Update seen jobs [skip ci]" || echo "No changes to commit"
+          git push || echo "No changes to push"
