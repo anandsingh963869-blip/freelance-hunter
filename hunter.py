@@ -15,15 +15,10 @@ if hasattr(sys.stdout, 'reconfigure'):
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SEEN_FILE = os.path.join(BASE_DIR, "seen_jobs.json")
 
-# Config from environment variables (for GitHub Actions) or defaults
+# Config from environment variables or defaults
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "9258009174:AAFByQvFIrZeshenTPmEizIGp9Wrk_MCGpA")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "6196853483")
 MERCURY_KEY = os.getenv("MERCURY_KEY", "sk_50f1cfaa0c554c08601a0870deeb767fa887bc7c9edb24774fbc5739ec55184e")
-
-FEEDS = [
-    ("r/forhire", "https://www.reddit.com/r/forhire/new/.rss"),
-    ("r/slavelabour", "https://www.reddit.com/r/slavelabour/new/.rss")
-]
 
 KEYWORDS = [
     "python", "scrape", "scraper", "scraping", "bot", "crawler", "automation",
@@ -65,7 +60,7 @@ def send_telegram(title, link, source, proposal):
         f"🔗 <a href=\"{link}\">👉 Click Here to Open Client Post</a>\n\n"
         f"📋 <b>Proposal Pitch (Copy & Send):</b>\n"
         f"<code>{clean_proposal}</code>\n\n"
-        f"💡 <i>Tip: Pehle client se budget aur link confirm karo, fir kaam shuru karenge!</i>"
+        f"💡 <i>Tip: Pehle client se budget confirm karo, fir kaam shuru karenge!</i>"
     )
 
     payload = {
@@ -122,57 +117,130 @@ def generate_proposal_mercury(job_title):
     )
 
 
-def run_scan():
-    seen = load_seen()
+def scan_reddit(seen):
     new_found = 0
+    feeds = [
+        ("Reddit r/forhire", "https://www.reddit.com/r/forhire/new/.rss"),
+        ("Reddit r/slavelabour", "https://www.reddit.com/r/slavelabour/new/.rss")
+    ]
     ns = {'atom': 'http://www.w3.org/2005/Atom'}
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnandHunter/2.0"}
 
-    for source_name, feed_url in FEEDS:
+    for source_name, feed_url in feeds:
         try:
             req = urllib.request.Request(feed_url, headers=headers)
             with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
                 xml_data = resp.read()
 
             root = ET.fromstring(xml_data)
-            entries = root.findall('atom:entry', ns)
-
-            for e in entries:
+            for e in root.findall('atom:entry', ns):
                 title_elem = e.find('atom:title', ns)
                 link_elem = e.find('atom:link', ns)
-
                 if title_elem is None or link_elem is None:
                     continue
 
                 title = title_elem.text or ""
                 link = link_elem.attrib.get('href', "")
-                lower_title = title.lower()
+                lower = title.lower()
 
                 if link in seen:
                     continue
-
-                # Must be a hiring post
-                if not any(tag in lower_title for tag in ["[hiring]", "hiring", "[task]", "task"]):
+                if not any(tag in lower for tag in ["[hiring]", "hiring", "[task]", "task"]):
+                    continue
+                if any(ex in lower for ex in EXCLUDE):
                     continue
 
-                # Exclude unwanted
-                if any(ex in lower_title for ex in EXCLUDE):
-                    continue
-
-                # Match keywords
-                if any(kw in lower_title for kw in KEYWORDS):
-                    print(f"[FOUND] {title}")
+                if any(kw in lower for kw in KEYWORDS):
+                    print(f"[{source_name}] Match: {title}")
                     proposal = generate_proposal_mercury(title)
                     send_telegram(title, link, source_name, proposal)
                     seen.add(link)
                     new_found += 1
                     time.sleep(2)
-
         except Exception as e:
             print(f"[{source_name} Error] {e}")
 
+    return new_found
+
+
+def scan_remotive(seen):
+    new_found = 0
+    url = "https://remotive.com/api/remote-jobs?category=software-dev&limit=15"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+
+        jobs = data.get("jobs", [])
+        for j in jobs:
+            title = j.get("title", "")
+            link = j.get("url", "")
+            lower = title.lower()
+
+            if link in seen:
+                continue
+
+            if any(kw in lower for kw in KEYWORDS):
+                source = f"Remotive ({j.get('company_name', 'Global')})"
+                print(f"[Remotive] Match: {title}")
+                proposal = generate_proposal_mercury(title)
+                send_telegram(title, link, source, proposal)
+                seen.add(link)
+                new_found += 1
+                time.sleep(2)
+    except Exception as e:
+        print(f"[Remotive Error] {e}")
+
+    return new_found
+
+
+def scan_weworkremotely(seen):
+    new_found = 0
+    url = "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
+            xml_data = resp.read()
+
+        root = ET.fromstring(xml_data)
+        for item in root.findall('.//item'):
+            title_elem = item.find('title')
+            link_elem = item.find('link')
+            if title_elem is None or link_elem is None:
+                continue
+
+            title = title_elem.text or ""
+            link = link_elem.text or ""
+            lower = title.lower()
+
+            if link in seen:
+                continue
+
+            if any(kw in lower for kw in KEYWORDS):
+                print(f"[WeWorkRemotely] Match: {title}")
+                proposal = generate_proposal_mercury(title)
+                send_telegram(title, link, "WeWorkRemotely", proposal)
+                seen.add(link)
+                new_found += 1
+                time.sleep(2)
+    except Exception as e:
+        print(f"[WeWorkRemotely Error] {e}")
+
+    return new_found
+
+
+def run_scan():
+    seen = load_seen()
+    total = 0
+    total += scan_reddit(seen)
+    total += scan_remotive(seen)
+    total += scan_weworkremotely(seen)
     save_seen(seen)
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Scan complete. Found {new_found} new jobs.")
+    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Full Multi-Channel Scan Complete. Sent {total} alerts.")
 
 
 if __name__ == "__main__":
