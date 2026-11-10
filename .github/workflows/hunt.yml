@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
   schedule:
-    # Runs every 30 minutes automatically 24/7 in GitHub cloud!
-    - cron: '*/30 * * * *'
+    # Runs every 15 minutes automatically 24/7 in GitHub cloud!
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,9 +25,9 @@ jobs:
 
       - name: Run Freelance Hunter
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || '9258009174:AAFByQvFIrZeshenTPmEizIGp9Wrk_MCGpA' }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || '6196853483' }}
-          MERCURY_KEY: ${{ secrets.MERCURY_KEY || 'sk_50f1cfaa0c554c08601a0870deeb767fa887bc7c9edb24774fbc5739ec55184e' }}
+          TELEGRAM_BOT_TOKEN: "9258009174:AAFByQvFIrZeshenTPmEizIGp9Wrk_MCGpA"
+          TELEGRAM_CHAT_ID: "6196853483"
+          MERCURY_KEY: "sk_50f1cfaa0c554c08601a0870deeb767fa887bc7c9edb24774fbc5739ec55184e"
         run: |
           python hunter.py
 
